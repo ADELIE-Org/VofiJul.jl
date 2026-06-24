@@ -39,6 +39,8 @@ jobs:
         run: |
           julia --project=docs -e '
             using Pkg
+            Pkg.Registry.add("General")
+            Pkg.Registry.add(RegistrySpec(url="https://github.com/ADELIE-Org/ADELIERegistry.git"))
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
 
