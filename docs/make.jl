@@ -3,11 +3,11 @@ using VofiJul
 
 makedocs(
     modules = [VofiJul],
-    authors = "ADELIE-org contributors",
+    authors = "ADELIE-Org contributors",
     sitename = "VofiJul.jl",
     format = Documenter.HTML(
-        canonical = "https://ADELIE-org.github.io/VofiJul.jl",
-        repolink = "https://github.com/ADELIE-org/VofiJul.jl",
+        canonical = "https://ADELIE-Org.github.io/VofiJul.jl",
+        repolink = "https://github.com/ADELIE-Org/VofiJul.jl",
         collapselevel = 2,
     ),
     pages = [
@@ -22,7 +22,7 @@ makedocs(
 # Only deploy docs if running in CI environment
 if get(ENV, "CI", "") == "true"
     deploydocs(
-        repo = "github.com/ADELIE-org/VofiJul.jl",
+        repo = "github.com/ADELIE-Org/VofiJul.jl",
         push_preview = true,
     )
 end
