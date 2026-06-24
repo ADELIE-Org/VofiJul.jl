@@ -38,6 +38,6 @@ jobs:
       - uses: codecov/codecov-action@v5
         with:
           files: lcov.info
-          slug: ADELIE-org/VofiJul.jl
+          slug: ADELIE-Org/VofiJul.jl
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
