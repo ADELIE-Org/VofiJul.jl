@@ -389,15 +389,16 @@ end
 
 @inline function (sf::SliceFunc4D)(coords)
     x0 = sf.x0
-    xbuf = sf.xbuf
-    for i in 1:length(x0)
-        xbuf[i] = x0[i]
-    end
-    xbuf[sf.ax_p] = coords[1]
-    xbuf[sf.ax_s] = coords[2]
-    xbuf[sf.ax_t] = coords[3]
-    xbuf[sf.ax_q] = sf.q_current
-    return call_integrand(sf.impl_func, sf.par, xbuf)
+    # Assemble the full 4-D coordinate as a STATIC SVector. Passing a dynamic
+    # `Vector` to the integrand makes its `f(coords...)` splat type-unstable,
+    # which boxes the result on every quadrature node — the dominant 4-D
+    # allocation. A static SVector lets `_snap`/the splat stay fixed-arity.
+    xb = SVector{4}(x0[1], x0[2], x0[3], x0[4])
+    xb = Base.setindex(xb, coords[1], sf.ax_p)
+    xb = Base.setindex(xb, coords[2], sf.ax_s)
+    xb = Base.setindex(xb, coords[3], sf.ax_t)
+    xb = Base.setindex(xb, sf.q_current, sf.ax_q)
+    return call_integrand(sf.impl_func, sf.par, xb)
 end
 
 function vofi_get_hypervolume(ws::VofiWorkspace, impl_func, par, x0, h0, base, pdir, sdir, tdir, qdir,
