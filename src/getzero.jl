@@ -1,7 +1,18 @@
+# Resolution floor for the root-finder's convergence test. `EPS_ROOT` (1e-14) is a
+# Float64-scale tolerance: for a reduced-precision `T` (e.g. `Float32`, whose
+# `eps` ≈ 1.2e-7) the step `dss` can never shrink below it, so the secant/bisection
+# loop stalls — `ss - sv3` underflows to 0 and the slope update `(fs-fv1)/(ss-sv3)`
+# becomes 0/0 = NaN, poisoning the cell limits. Scale the tolerance to the working
+# precision so the loop terminates cleanly. For `Float64` the `EPS_ROOT` floor still
+# dominates (eps(Float64)·len ≪ 1e-14), so the production path is unchanged.
+_root_eps(::Type{T}) where {T<:AbstractFloat} = eps(T)
+_root_eps(::Type) = eps(Float64)   # Dual / other Reals: assume Float64-backed
+
 function vofi_get_segment_zero(ws::VofiWorkspace, impl_func, par, x0, dir, s0, f_sign)
     # Element type flows from the geometry / segment data so AD duals and reduced
     # precision propagate; defaults to vofi_real for plain Float64 inputs.
     T = promote_type(eltype(x0), eltype(dir), eltype(s0))
+    eps_root = max(T(EPS_ROOT), 4 * _root_eps(T) * (abs(T(s0[1])) + one(T)))
     xs = ws.gsz_xs  # fully overwritten before each read
     sl = zero(T)
     sr = T(s0[1])
@@ -43,7 +54,7 @@ function vofi_get_segment_zero(ws::VofiWorkspace, impl_func, par, x0, dir, s0, f
             ss -= dss
         end
         iter += 1
-        if abs(dss) < EPS_ROOT
+        if abs(dss) < eps_root
             not_conv = false
             s0[4] = f_sign * fps
         end
@@ -53,7 +64,12 @@ function vofi_get_segment_zero(ws::VofiWorkspace, impl_func, par, x0, dir, s0, f
                 xs[i] = x0[i] + ss * dir[i]
             end
             fs = f_sign * call_integrand(impl_func, par, xs)
-            fps = (fs - fv1) / (ss - sv3)
+            # Guard the finite-difference slope: when the abscissa step underflows
+            # (`ss == sv3` in reduced precision) keep the previous slope rather than
+            # forming 0/0. For Float64 the denominator is never exactly zero here, so
+            # this never triggers on the production path.
+            den = ss - sv3
+            fps = iszero(den) ? fps : (fs - fv1) / den
             if fs < 0.0
                 sl = ss
                 fl = fs

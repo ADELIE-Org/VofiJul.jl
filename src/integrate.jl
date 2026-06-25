@@ -174,15 +174,25 @@ function vofi_get_area(ws::VofiWorkspace, impl_func, par, x0, h0, base, pdir, sd
                     if k > 1
                         dxm1 = xhp[it0].xt0[k + 1] - xhp[it0].xt0[k]
                         dxp1 = xhp[it0].xt0[k + 2] - xhp[it0].xt0[k + 1]
-                        a1 = (xhp[it0].ht0[k + 1] - xhp[it0].ht0[k]) / dxm1
+                        # This polynomial predictor only refines the root-finder's
+                        # starting guess (s0[2]/s0[4]). For a tiny section in reduced
+                        # precision, adjacent Gauss-Legendre abscissae can round to the
+                        # same value, so `dxm1`/`dxm2` underflow to 0 and the slopes
+                        # `a1`/`b1` blow up to NaN — which then poisons the guess and
+                        # the returned segment zero. When the spacing degenerates the
+                        # correction is negligible anyway, so skip it (a1=b1=0). For
+                        # Float64 the abscissae never coincide, so this never triggers.
+                        a1 = iszero(dxm1) ? zero(a1) : (xhp[it0].ht0[k + 1] - xhp[it0].ht0[k]) / dxm1
                         s0[2] += a1 * dxp1
-                        b1 = (xhp[it0].htp[k + 1] - xhp[it0].htp[k]) / dxm1
+                        b1 = iszero(dxm1) ? zero(b1) : (xhp[it0].htp[k + 1] - xhp[it0].htp[k]) / dxm1
                         s0[4] += b1 * dxp1
                         if k > 2
                             dxm2 = xhp[it0].xt0[k + 1] - xhp[it0].xt0[k - 1]
                             dxp2 = xhp[it0].xt0[k + 2] - xhp[it0].xt0[k]
-                            s0[2] += (a1 - a2) * dxp1 * dxp2 / dxm2
-                            s0[4] += (b1 - b2) * dxp1 * dxp2 / dxm2
+                            if !iszero(dxm2)
+                                s0[2] += (a1 - a2) * dxp1 * dxp2 / dxm2
+                                s0[4] += (b1 - b2) * dxp1 * dxp2 / dxm2
+                            end
                         end
                     end
                     if f_sign < 0

@@ -123,3 +123,38 @@ end
     println("4D sinusoidal slab → Numerical = $(total_sine), Exact = $(exact), Error = $(abs(total_sine - exact)))")
     @test total_sine ≈ exact atol=2e-3
 end
+
+@testset "4D Float32 robustness (no NaN; matches Float64)" begin
+    # Regression for the reduced-precision NaN bug: the Float64-scale root tolerance
+    # `EPS_ROOT` (1e-14) is unreachable in Float32, so the segment root-finder stalled
+    # and `(fs-fv1)/(ss-sv3)` / the quadrature predictor `…/dxm1` formed 0/0 = NaN,
+    # poisoning the cut-cell volume fraction. Fixed by a precision-aware tolerance +
+    # guarded degenerate-spacing divisions. Sweep a 4-sphere and require every cell to
+    # be finite and within Float32 precision of the Float64 result.
+    n = 16
+    xs64 = collect(range(-1.0, 1.0, n + 1))
+    xs32 = Float32.(xs64)
+    p32 = c -> c[1]^2 + c[2]^2 + c[3]^2 + c[4]^2 - 0.5f0^2
+    p64 = c -> c[1]^2 + c[2]^2 + c[3]^2 + c[4]^2 - 0.5^2
+    nbad = 0
+    maxd = 0.0
+    ncut = 0
+    for i in 1:n, j in 1:n, k in 1:n, l in 1:n
+        lo32 = Float32[xs32[i], xs32[j], xs32[k], xs32[l]]
+        h32  = Float32[xs32[i+1]-xs32[i], xs32[j+1]-xs32[j], xs32[k+1]-xs32[k], xs32[l+1]-xs32[l]]
+        lo64 = Float64[xs64[i], xs64[j], xs64[k], xs64[l]]
+        h64  = Float64[xs64[i+1]-xs64[i], xs64[j+1]-xs64[j], xs64[k+1]-xs64[k], xs64[l+1]-xs64[l]]
+        ws32 = VofiJul.VofiWorkspace{Float32}(); xe32 = zeros(Float32, 5)
+        ws64 = VofiJul.VofiWorkspace{Float64}(); xe64 = zeros(Float64, 5)
+        cc32 = VofiJul.vofi_get_cc(ws32, p32, nothing, lo32, h32, xe32, (1,1), (4,4,4,4), (0,0), 4)
+        cc64 = VofiJul.vofi_get_cc(ws64, p64, nothing, lo64, h64, xe64, (1,1), (4,4,4,4), (0,0), 4)
+        isfinite(cc32) || (nbad += 1)
+        if 0.0 < cc64 < 1.0
+            ncut += 1
+            maxd = max(maxd, abs(cc32 - cc64))
+        end
+    end
+    @test nbad == 0
+    @test ncut > 0
+    @test maxd < 1.0f-5     # Float32-precision agreement on cut cells
+end
