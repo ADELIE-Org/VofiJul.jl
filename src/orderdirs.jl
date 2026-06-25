@@ -55,11 +55,9 @@ end
 
 function vofi_order_dirs_2D(ws::VofiWorkspace, impl_func, par, x0, h0, pdir, sdir, f0, xfs_pt)
     T = promote_type(eltype(x0), eltype(h0))
-    # order_dirs runs once per cell, so its scratch is cheaper as fresh stack
-    # locals than as workspace MArray fields (indexing a heap-struct MArray field
-    # allocates on every access). Keep these local.
-    n0 = zero(MMatrix{NSE, NSE, vofi_int})
-    fc = zero(MMatrix{NDIM, NDIM, T})
+    # order_dirs runs once per cell. `fc`/`nc` below are built as stack-resident
+    # immutable `SArray`s (no heap alloc); `n0` is only needed on the near-boundary
+    # branch, so it is allocated lazily there rather than unconditionally here.
     hh = 0.5 .* SVector{NDIM}(h0[1], h0[2], h0[3])
     np0 = 0
     nm0 = 0
@@ -93,6 +91,7 @@ function vofi_order_dirs_2D(ws::VofiWorkspace, impl_func, par, x0, h0, pdir, sdi
     fth = fgradmod * hm
 
     if np0 * nm0 == 0
+        n0 = zero(MMatrix{NSE, NSE, vofi_int})
         np0 = nm0 = 0
         for i in 0:1
             for j in 0:1
@@ -121,32 +120,27 @@ function vofi_order_dirs_2D(ws::VofiWorkspace, impl_func, par, x0, h0, pdir, sdi
     end
 
     have = 0.5 * (h0[1] + h0[2])
-    for i in 0:1
-        for j in 0:1
-            fc[2 * i + 1, 2 * j + 1] = f0[i + 1, j + 1]
+    # 3×3 refined stencil as a stack-resident immutable SArray (no heap alloc;
+    # GPU-friendly). Entry (a,b) is the level set at x0[d] + (idx_d - 1) * hh[d]
+    # (3rd coord fixed at x0[3]); the 4 all-odd corners reuse f0 (already
+    # evaluated above). `ntuple(_, Val(9))` unrolls so every index is constant.
+    fc = SArray{Tuple{NDIM, NDIM}, T}(ntuple(Val(NDIM * NDIM)) do n
+        a = (n - 1) % NDIM + 1
+        b = (n - 1) ÷ NDIM + 1
+        if isodd(a) && isodd(b)
+            @inbounds f0[(a + 1) >> 1, (b + 1) >> 1]
+        else
+            p = SVector{NDIM, T}(x0[1] + (a - 1) * hh[1],
+                                 x0[2] + (b - 1) * hh[2],
+                                 x0[3])
+            call_integrand(impl_func, par, p)
         end
-    end
-    for i in 1:NDIM
-        x1[i] = x0[i] + hh[i]
-    end
-    fc[2, 2] = call_integrand(impl_func, par, x1)
-    for i in 0:2:2
-        x1[1] = x0[1] + i * hh[1]
-        fc[i + 1, 2] = call_integrand(impl_func, par, x1)
-    end
-    x1[1] = x0[1] + hh[1]
-    for j in 0:2:2
-        x1[2] = x0[2] + j * hh[2]
-        fc[2, j + 1] = call_integrand(impl_func, par, x1)
-    end
+    end)
 
-    nc = zero(MMatrix{NDIM, NDIM, vofi_int})
-    for i in 1:NDIM
-        for j in 1:NDIM
-            val = fc[i, j]
-            nc[i, j] = val > 0 ? 1 : val < 0 ? -1 : 0
-        end
-    end
+    nc = SArray{Tuple{NDIM, NDIM}, vofi_int}(ntuple(Val(NDIM * NDIM)) do n
+        v = @inbounds fc[n]
+        v > 0 ? vofi_int(1) : v < 0 ? vofi_int(-1) : vofi_int(0)
+    end)
 
     nix = niy = 0
     for i in 0:2:2
@@ -160,8 +154,8 @@ function vofi_order_dirs_2D(ws::VofiWorkspace, impl_func, par, x0, h0, pdir, sdi
         end
     end
 
-    fill!(pdir, 0)
-    fill!(sdir, 0)
+    zfill!(pdir, 0)
+    zfill!(sdir, 0)
     if niy > nix
         jp, js = 2, 1
     elseif nix > niy
@@ -263,19 +257,24 @@ function vofi_order_dirs_3D(ws::VofiWorkspace, impl_func, par, x0, h0, pdir, sdi
     fth = sqrt(2.0) * fgradmod * hm
 
     if np0 * nm0 == 0
-        n0 = zero(MArray{Tuple{NSE, NSE, NSE}, vofi_int})
+        # n0[a,b,c] = 1 where the corner is within the gradient band (|f0| ≤ fth),
+        # else 0. Built as a stack-resident immutable SArray (no heap MArray); it is
+        # only READ downstream (vofi_check_boundary_surface's per-corner write was a
+        # dead store — each corner is visited once). ntuple(_, Val(8)) → const indices.
+        n0 = SArray{Tuple{NSE, NSE, NSE}, vofi_int}(ntuple(Val(NSE * NSE * NSE)) do n
+            a = (n - 1) % NSE
+            b = ((n - 1) ÷ NSE) % NSE
+            c = (n - 1) ÷ (NSE * NSE)
+            @inbounds abs(f0[a + 1, b + 1, c + 1]) > fth ? vofi_int(0) : vofi_int(1)
+        end)
         np0 = nm0 = 0
         for i in 0:1, j in 0:1, k in 0:1
-            val = abs(f0[i + 1, j + 1, k + 1])
-            if val > fth
-                n0[i + 1, j + 1, k + 1] = 0
+            if abs(f0[i + 1, j + 1, k + 1]) > fth
                 if f0[i + 1, j + 1, k + 1] < 0
                     nm0 += 1
                 else
                     np0 += 1
                 end
-            else
-                n0[i + 1, j + 1, k + 1] = 1
             end
         end
         if nm0 == nmax0
@@ -358,9 +357,9 @@ function vofi_order_dirs_3D(ws::VofiWorkspace, impl_func, par, x0, h0, pdir, sdi
         end
     end
 
-    fill!(pdir, 0.0)
-    fill!(sdir, 0.0)
-    fill!(tdir, 0.0)
+    zfill!(pdir, 0.0)
+    zfill!(sdir, 0.0)
+    zfill!(tdir, 0.0)
     pdir[jp] = 1.0
     sdir[js] = 1.0
     tdir[jt] = 1.0
@@ -374,42 +373,38 @@ function vofi_order_dirs_3D(ws::VofiWorkspace, impl_func, par, x0, h0, pdir, sdi
     vofi_check_tertiary_side(ws, impl_func, par, x0, h0, pdir, sdir, tdir, f0, xfsp, fth)
 
     have = 0.5 * (h0[jp] + h0[js])
-    curv = zero(MVector{NDIM, T})
-    sumf = zero(MVector{NDIM, T})
     pd1, pd2, pd3 = Int(pdir[1]), Int(pdir[2]), Int(pdir[3])
     sd1, sd2, sd3 = Int(sdir[1]), Int(sdir[2]), Int(sdir[3])
     td1, td2, td3 = Int(tdir[1]), Int(tdir[2]), Int(tdir[3])
+    # Accumulate the curvature estimate as running scalars; the per-direction
+    # weight (sk) and curvature (ck) are consumed immediately, so no MVector
+    # scratch is needed (was curv/sumf MVector{3}).
+    sumf_curv = zero(T)
+    sumf_total = zero(T)
     for k in 1:NDIM
         kz = k - 1
         i0 = kz * td1
         j0 = kz * td2
         k0 = kz * td3
-        sumf[k] = 0.0
+        sk = zero(T)
         for i in 0:NDIM-1, j in 0:NDIM-1
             ii = i0 + i * sd1 + j * pd1
             jj = j0 + i * sd2 + j * pd2
             kk = k0 + i * sd3 + j * pd3
             fd[i + 1, j + 1] = fc[ii + 1, jj + 1, kk + 1]
-            sumf[k] += fd[i + 1, j + 1]
+            sk += fd[i + 1, j + 1]
         end
-        sumf[k] = 1.0 / max(abs(sumf[k]), EPS_NOT0)
+        sk = one(T) / max(abs(sk), EPS_NOT0)
         fx = (fd[3, 2] - fd[1, 2]) * have / h0[js]
         fy = (fd[2, 3] - fd[2, 1]) * have / h0[jp]
         fxx = (fd[3, 2] + fd[1, 2] - 2 * fd[2, 2]) * have^2 / (hh[js] * hh[js])
         fyy = (fd[2, 3] + fd[2, 1] - 2 * fd[2, 2]) * have^2 / (hh[jp] * hh[jp])
         fxy = (fd[3, 3] - fd[3, 1] - fd[1, 3] + fd[1, 1]) * have^2 / (h0[js] * h0[jp])
         tmp = sqrt((fx^2 + fy^2)^3)
-        if !isfinite(tmp) || tmp < EPS_NOT0
-            curv[k] = 0.0
-            continue
-        end
-        curv[k] = abs(fxx * fy^2 - 2 * fx * fy * fxy + fx^2 * fyy) / tmp
-    end
-    sumf_curv = zero(T)
-    sumf_total = zero(T)
-    for k in 1:NDIM
-        sumf_curv += sumf[k] * curv[k]
-        sumf_total += sumf[k]
+        ck = (!isfinite(tmp) || tmp < EPS_NOT0) ? zero(T) :
+             abs(fxx * fy^2 - 2 * fx * fy * fxy + fx^2 * fyy) / tmp
+        sumf_curv += sk * ck
+        sumf_total += sk
     end
     Kappa = sumf_curv / sumf_total
     a0, a1, a2, a3 = 2.34607, 16.5515, -5.53054, 54.0866
@@ -450,11 +445,11 @@ end
 @inline sign_indicator(val::Real) = val > 0 ? 1 : val < 0 ? -1 : 0
 
 function reset_min_data4d!(md::MinData4D)
-    fill!(md.xval, 0.0)
+    zfill!(md.xval, 0.0)
     md.fval = 0.0
     md.sval = 0.0
     md.span = 0.0
-    fill!(md.isc, 0)
+    zfill!(md.isc, 0)
 end
 
 function reset_xfsp4d!(xfsp::XFSP4D)
@@ -662,7 +657,7 @@ function vofi_order_dirs_4D(ws::VofiWorkspace, impl_func, par, x0::AbstractVecto
 
     check_dir = -1
     if np0 * nm0 == 0
-        n0 = ws.od4_n0; fill!(n0, 0)
+        n0 = ws.od4_n0; zfill!(n0, 0)
         np0 = 0
         nm0 = 0
         for i in 0:1, j in 0:1, k in 0:1, l in 0:1
@@ -702,10 +697,10 @@ function vofi_order_dirs_4D(ws::VofiWorkspace, impl_func, par, x0::AbstractVecto
             order[1], order[idx] = order[idx], order[1]
         end
     end
-    fill!(pdir, 0.0)
-    fill!(sdir, 0.0)
-    fill!(tdir, 0.0)
-    fill!(qdir, 0.0)
+    zfill!(pdir, 0.0)
+    zfill!(sdir, 0.0)
+    zfill!(tdir, 0.0)
+    zfill!(qdir, 0.0)
     pdir[order[1]] = 1.0
     sdir[order[2]] = 1.0
     tdir[order[3]] = 1.0

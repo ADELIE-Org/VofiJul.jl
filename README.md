@@ -14,22 +14,25 @@ the interface centroid and surface measure. Supports **1D, 2D, 3D and 4D** cells
   (fraction + optional centroid / interface measure), `vofi_get_cell_type`
   (full / empty / cut), `vofi_interface_centroid`.
 - **Dimensions 1–4** (1D length, 2D area, 3D volume, 4D hypervolume).
-- **Automatic differentiation.**
+- **Automatic differentiation** (forward-verified against finite differences in
+  **all** of 1D/2D/3D/4D).
   - Geometry/shape sensitivity for free via `ForwardDiff` (feed `Dual`
-    coordinates — the whole pipeline is element-type generic).
+    coordinates — the whole pipeline, including the root-finder and quadrature, is
+    element-type generic).
   - Level-set *parameter* sensitivity (adjoint) via a custom shape-derivative
     rule: `vofi_cc`, `vofi_cc_and_grad` (+ `ChainRulesCore` `rrule`/`frule`),
     using the Reynolds-transport identity rather than differentiating the
     root-finder.
 - **Element types:** `Float64` (default), `Float32`, or AD `Dual` flow end-to-end.
 - **Low allocation:** scratch is reused through a per-thread workspace, so a tight
-  per-cell loop allocates ≈0 (≈0.4 KB per *cut* cell in 2D/3D, ≈6 KB in 4D;
-  full/empty cells ≈0).
+  per-cell loop allocates ≈0 — about **0.2 KB per *cut* cell in 2D, 0.3 KB in 3D**;
+  `vofi_interface_centroid` is allocation-free; full/empty cells ≈0.
 - **Multithreading:** `vofi_get_cc_batch`, `vofi_get_cell_type_batch`.
 - **GPU / accelerators:** `vofi_get_cc_gpu` — a backend-agnostic
   [KernelAbstractions](https://github.com/JuliaGPU/KernelAbstractions.jl) kernel
-  (one cell per work-item). Runs on the multithreaded `CPU()` backend today; the
-  same call targets `CUDABackend()` / `ROCBackend()` on supported hardware.
+  (one cell per work-item). Runs on the multithreaded `CPU()` backend today; running
+  on-device (`CUDABackend()` / `ROCBackend()`) still needs the per-work-item scratch
+  made GC-free (see **Status**).
 
 ## Installation
 

@@ -151,14 +151,27 @@ end
 
 LenData(; kwargs...) = LenData{vofi_real}(; kwargs...)
 
+# `fill!(::StaticArrays.MArray, x)` boxes (~32 B/call); an explicit indexed loop on
+# a local binding does not. `zfill!` is the allocation-free zeroing used for all
+# per-cut-cell static workspace/scratch resets. Falls back to `fill!` for ordinary
+# `AbstractArray`s (e.g. the 4D dynamic `Vector` scratch), where `fill!` is already
+# allocation-free.
+@inline function zfill!(a::StaticArrays.StaticArray, x)
+    @inbounds @simd for i in eachindex(a)
+        a[i] = x
+    end
+    return a
+end
+@inline zfill!(a, x) = fill!(a, x)
+
 # Reset a scratch struct to the exact state produced by its no-arg constructor,
 # so a hoisted-and-reused instance behaves identically to a freshly allocated one.
 function reset!(d::LenData)
     d.np0 = 0
     d.f_sign = 1
-    fill!(d.xt0, 0)
-    fill!(d.ht0, 0)
-    fill!(d.htp, 0)
+    zfill!(d.xt0, 0)
+    zfill!(d.ht0, 0)
+    zfill!(d.htp, 0)
     return d
 end
 
@@ -172,10 +185,10 @@ function reset!(d::DirData)
 end
 
 function reset!(d::MinData)
-    fill!(d.xval, 0)
+    zfill!(d.xval, 0)
     d.fval = zero(eltype(d.xval))
     d.sval = zero(eltype(d.xval))
-    fill!(d.isc, 0)
+    zfill!(d.isc, 0)
     d.ipt = 0
     return d
 end

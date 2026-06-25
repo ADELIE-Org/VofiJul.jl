@@ -162,6 +162,17 @@ end
 
 # -----------------------------
 
+@testset "short npt/nex/nvis vectors don't overflow (bounds guard)" begin
+    # A genuinely-cut 3D cell. The internal refinement reads npt[3]/npt[4]; passing
+    # a short npt must be guarded (length check) rather than throwing a BoundsError.
+    sdf(x, _) = sqrt(x[1]^2 + x[2]^2 + x[3]^2) - 0.3
+    args = (sdf, nothing, [0.1, -0.25, -0.25], [0.5, 0.5, 0.5])
+    full = vofi_get_cc(args..., zeros(5), [0, 0], [0, 0, 0, 0], [0, 0], 3)
+    short = vofi_get_cc(args..., zeros(5), [0, 0], [0, 0], [0, 0], 3)  # npt length 2
+    @test 0 < full < 1
+    @test short ≈ full
+end
+
 @testset "2D Vofi test" begin
     include("test_2d.jl")
 end

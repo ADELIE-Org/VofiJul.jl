@@ -78,7 +78,7 @@ end
 function vofi_get_limits_2D(ws::VofiWorkspace, impl_func, par, x0, h0, f0, xfsp, base, pdir, sdir, nsect, ndire)
     T = promote_type(eltype(x0), eltype(h0))
     baser = base
-    basei = ws.gl2_basei; fill!(basei, 0)
+    basei = ws.gl2_basei; zfill!(basei, 0)
     baser[1] = 0
     basei[1] = 1
     nsub = 1
@@ -86,12 +86,12 @@ function vofi_get_limits_2D(ws::VofiWorkspace, impl_func, par, x0, h0, f0, xfsp,
     atleast1 = false
     iside = 1
     isect = 2
-    sign_sect = ws.gl2_sign_sect; fill!(sign_sect, 0)
+    sign_sect = ws.gl2_sign_sect; zfill!(sign_sect, 0)
     hs = zero(T)
     for i in 1:NDIM
         hs += sdir[i] * h0[i]
     end
-    nbt = ws.gl2_nbt; fill!(nbt, 0)
+    nbt = ws.gl2_nbt; zfill!(nbt, 0)
 
     fse = ws.gl2_fse
     x1 = ws.gl2_x1
@@ -164,7 +164,7 @@ end
 function vofi_get_limits_3D(ws::VofiWorkspace, impl_func, par, x0, h0, f0, xfsp, base, pdir, sdir, tdir)
     T = promote_type(eltype(x0), eltype(h0))
     baser = base
-    basei = ws.gl3_basei; fill!(basei, 0)
+    basei = ws.gl3_basei; zfill!(basei, 0)
     baser[1] = 0
     basei[1] = 1
     nsub = 1
@@ -281,7 +281,7 @@ end
 function vofi_check_plane(ws::VofiWorkspace, impl_func, par, x0, h0, xfs_pt, base, pdir, sdir, nsect, ndire)
     T = promote_type(eltype(x0), eltype(h0))
     baser = base
-    basei = ws.cp_basei; fill!(basei, 0)
+    basei = ws.cp_basei; zfill!(basei, 0)
     baser[1] = 0
     basei[1] = 1
     nsub = 1
@@ -294,8 +294,8 @@ function vofi_check_plane(ws::VofiWorkspace, impl_func, par, x0, h0, xfs_pt, bas
     x2 = ws.cp_x2
     fse = ws.cp_fse
     xfsl = ws.cp_xfsl; reset!(xfsl)
-    nbt = ws.cp_nbt; fill!(nbt, 0)
-    sign_sect = ws.cp_sign_sect; fill!(sign_sect, 0)
+    nbt = ws.cp_nbt; zfill!(nbt, 0)
+    sign_sect = ws.cp_sign_sect; zfill!(sign_sect, 0)
     atleast1 = false
     down2up = 1
     iside = 1
@@ -394,7 +394,7 @@ end
 function vofi_get_limits_inner_2D(ws::VofiWorkspace, impl_func, par, x0, h0, xfs_pt, base, pdir, sdir, nsect, ndire, nsub_int)
     T = promote_type(eltype(x0), eltype(h0))
     baser = base
-    basei = ws.gli_basei; fill!(basei, 0)
+    basei = ws.gli_basei; zfill!(basei, 0)
     baser[1] = 0
     basei[1] = 1
     nsub = 1
@@ -461,7 +461,7 @@ end
 function vofi_get_limits_edge_2D(ws::VofiWorkspace, impl_func, par, x0, h0, xfs_pt, base, pdir, sdir, nsub_int)
     T = promote_type(eltype(x0), eltype(h0))
     baser = base
-    basei = ws.gle_basei; fill!(basei, 0)
+    basei = ws.gle_basei; zfill!(basei, 0)
     baser[1] = 0
     basei[1] = 1
     nsub = 1

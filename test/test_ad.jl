@@ -1,13 +1,17 @@
 # Element-type genericity (Pass A) and automatic differentiation.
 #
-# The 1D path flows a generic element type `T` derived from the cell geometry, so
-# ForwardDiff `Dual`s and Float32 propagate end-to-end. Float64 is the default
-# and pays nothing extra. The natural AD variable here is the cell geometry
-# (origin/width) — the shape sensitivity; differentiating w.r.t. a level-set
-# parameter is the planned custom adjoint rule's job, not forward-through.
+# Every path (1D/2D/3D/4D) flows a generic element type `T` derived from the cell
+# geometry, so ForwardDiff `Dual`s and Float32 propagate end-to-end through the
+# root-finder and quadrature. Float64 is the default and pays nothing extra. The
+# natural AD variable here is the cell geometry (origin/width) — the shape
+# sensitivity; differentiating w.r.t. a level-set *parameter* is the job of the
+# custom adjoint rule (`vofi_cc`/`vofi_cc_and_grad`), not forward-through.
 #
-# NOTE: only the 1D path is fully T-generic so far; 2D/3D/4D propagation is the
-# remaining A2 work and is intentionally not exercised for AD here.
+# All four dimensions are exercised below and FD-verified. NOTE: a degenerate
+# cell whose interface lies entirely interior (all corners same sign) yields a
+# constant `cc` w.r.t. small geometry perturbations, so its derivative is
+# genuinely 0 — pick a genuinely-cut cell (interface crosses a face) when
+# checking shape sensitivity.
 
 using VofiJul
 using ForwardDiff

@@ -1,7 +1,7 @@
 function vofi_check_boundary_line(ws::VofiWorkspace, impl_func, par, x0, h0, f0, xfs_pt, n0)
     T = promote_type(eltype(x0), eltype(h0))
-    nx = ws.cbl_nx; fill!(nx, 1)
-    ny = ws.cbl_ny; fill!(ny, 1)
+    nx = ws.cbl_nx; zfill!(nx, 1)
+    ny = ws.cbl_ny; zfill!(ny, 1)
     sidedirx = (1.0, 0.0, 0.0)
     sidediry = (0.0, 1.0, 0.0)
     fse = ws.cbl_fse
@@ -60,9 +60,9 @@ end
 
 function vofi_check_boundary_surface(ws::VofiWorkspace, impl_func, par, x0, h0, f0, xfs, n0)
     T = promote_type(eltype(x0), eltype(h0))
-    nx = ws.cbs_nx; fill!(nx, 1)
-    ny = ws.cbs_ny; fill!(ny, 1)
-    nz = ws.cbs_nz; fill!(nz, 1)
+    nx = ws.cbs_nx; zfill!(nx, 1)
+    ny = ws.cbs_ny; zfill!(ny, 1)
+    nz = ws.cbs_nz; zfill!(nz, 1)
     sidedirx = (1.0, 0.0, 0.0)
     sidediry = (0.0, 1.0, 0.0)
     sidedirz = (0.0, 0.0, 1.0)
@@ -135,7 +135,8 @@ function vofi_check_boundary_surface(ws::VofiWorkspace, impl_func, par, x0, h0, 
                             end
                         end
                     end
-                    n0[i + 1, j + 1, k + 1] = 0
+                    # (No write-back: each corner is visited once, so marking it
+                    # processed here was a dead store. n0 is now an immutable SArray.)
                 end
             end
         end
@@ -263,10 +264,10 @@ end
 function vofi_check_boundary_hypersurface(ws::VofiWorkspace, impl_func, par, x0::AbstractVector, h0::AbstractVector, f0::AbstractArray{<:Any, 4}, xfs, n0::AbstractArray{<:Integer, 4})
     # For 4D hypercube, we have 8 cubic (3D) faces
     # Each face is defined by fixing one coordinate at 0 or 1
-    nx = ws.cbh_nx; fill!(nx, 1)
-    ny = ws.cbh_ny; fill!(ny, 1)
-    nz = ws.cbh_nz; fill!(nz, 1)
-    nw = ws.cbh_nw; fill!(nw, 1)
+    nx = ws.cbh_nx; zfill!(nx, 1)
+    ny = ws.cbh_ny; zfill!(ny, 1)
+    nz = ws.cbh_nz; zfill!(nz, 1)
+    nw = ws.cbh_nw; zfill!(nw, 1)
 
     fcube = ws.cbh_fcube  # 8 vertices of a cube face
     x1 = ws.cbh_x1

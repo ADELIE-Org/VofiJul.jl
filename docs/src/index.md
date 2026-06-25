@@ -21,13 +21,15 @@ Highlights:
 
 - Element-type generic: `Float64` (default), `Float32`, or `ForwardDiff.Dual`
   flow end-to-end, so **geometry/shape sensitivity** comes for free via
-  forward-mode AD.
+  forward-mode AD — FD-verified in all of 1D/2D/3D/4D.
 - **Level-set parameter sensitivity (adjoint)** via a custom shape-derivative rule
   (`vofi_cc_and_grad`, with `ChainRulesCore` `rrule`/`frule`) — based on the
   Reynolds-transport identity, not differentiation through the root-finder.
-- **Low allocation** (scratch reused through a per-thread workspace),
-  **multithreaded batch** drivers, and a backend-agnostic
-  **KernelAbstractions** kernel (`vofi_get_cc_gpu`).
+- **Low allocation** (scratch reused through a per-thread workspace; ≈0.2–0.3 KB
+  per cut cell in 2D/3D, allocation-free `vofi_interface_centroid`),
+  **multithreaded batch** drivers, and a backend-agnostic **KernelAbstractions**
+  kernel (`vofi_get_cc_gpu`, `CPU()` backend today — on-device GPU pending a
+  GC-free workspace).
 
 ## Quick Example
 
@@ -50,7 +52,7 @@ n = 64; h = 1/n
 origins = [[-0.5 + i*h, -0.5 + j*h] for i in 0:n-1 for j in 0:n-1]
 ccs = vofi_get_cc_batch(circle, nothing, origins, [h, h], 2)
 
-# GPU / accelerator (same call runs on CUDABackend()/ROCBackend())
+# GPU / accelerator kernel (CPU() backend today; on-device CUDA/ROCm pending)
 using KernelAbstractions
 ccs_gpu = vofi_get_cc_gpu(circle, nothing, origins, (h, h), 2; backend = CPU())
 

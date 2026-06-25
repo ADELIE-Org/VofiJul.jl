@@ -278,10 +278,10 @@ function vofi_get_volume(ws::VofiWorkspace, impl_func, par, x0, h0, base_ext, pd
             dt_scaled = 0.0
         end
         nexpt = min(20, Int(floor(dt_scaled)) + 3)
-        if 3 <= npt[4] <= 20
+        if length(npt) >= 4 && 3 <= npt[4] <= 20
             nexpt = min(npt[4], nexpt)
         end
-        if 3 <= npt[3] <= 20
+        if length(npt) >= 3 && 3 <= npt[3] <= 20
             nexpt = max(npt[3], nexpt)
         end
         ptx_ext = gauss_legendre_nodes(nexpt)
@@ -413,7 +413,7 @@ function vofi_get_hypervolume(ws::VofiWorkspace, impl_func, par, x0, h0, base, p
     h3[2] = hs
     h3[3] = ht
     xex3 = ws.gh_xex3
-    nex_slice = ws.gh_nex_slice; fill!(nex_slice, 0)
+    nex_slice = ws.gh_nex_slice; zfill!(nex_slice, 0)
     want_centroid = nex[1] > 0
     want_surface = (length(nex) >= 2) && nex[2] > 0
     if want_centroid
@@ -422,7 +422,7 @@ function vofi_get_hypervolume(ws::VofiWorkspace, impl_func, par, x0, h0, base, p
     if want_surface
         nex_slice[2] = 1
     end
-    nvis_slice = ws.gh_nvis_slice; fill!(nvis_slice, 0)
+    nvis_slice = ws.gh_nvis_slice; zfill!(nvis_slice, 0)
 
     xbuf = ws.gh_xbuf
     for i in 1:length(x0)
@@ -462,7 +462,7 @@ function vofi_get_hypervolume(ws::VofiWorkspace, impl_func, par, x0, h0, base, p
             xi = clamp(xi, zero(T), hq)
             q_abs = q_origin + xi
             slice_func.q_current = q_abs
-            fill!(xex3, 0.0)
+            zfill!(xex3, 0.0)
             # Type assertion breaks the vofi_get_cc → vofi_get_hypervolume →
             # vofi_get_cc mutual-recursion inference cycle that otherwise infers
             # `Any` and de-specialises the whole 4D path.

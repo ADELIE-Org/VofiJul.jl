@@ -30,11 +30,11 @@ function vofi_get_cc(ws::VofiWorkspace, impl_func, par, xin, h0, xex, nex, npt, 
     if length(xex) < required_len
         resize!(xex, required_len)
     end
-    fill!(xex, 0)
+    zfill!(xex, 0)
     x0 = ws.cc_x0
     # Reuse the workspace buffer instead of allocating a fresh padded vector.
     hvec = ws.cc_hvec
-    fill!(hvec, 0)
+    zfill!(hvec, 0)
     @inbounds for i in 1:min(length(h0), NDIM)
         hvec[i] = T(h0[i])
     end
